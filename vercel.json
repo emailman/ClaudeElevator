@@ -1,0 +1,5 @@
+{
+  "buildCommand": "./gradlew wasmJsBrowserDistribution --build-cache",
+  "outputDirectory": "build/dist/wasmJs/productionExecutable",
+  "installCommand": "yum install -y java-17-amazon-corretto-devel"
+}
