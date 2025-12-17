@@ -89,13 +89,27 @@ fun App() {
         }
 
         if (elevatorState.doorState == DoorState.CLOSED) {
+            // Check if there's a call or queued request at the current floor
+            val currentFloor = elevatorState.currentFloor
+            val callAtCurrentFloor = currentFloor in elevatorState.callButtonsUp ||
+                    currentFloor in elevatorState.callButtonsDown ||
+                    currentFloor in elevatorState.queuedFloors
+
+            if (callAtCurrentFloor) {
+                // Clear the call buttons/queue and open doors
+                elevatorState.callButtonsUp -= currentFloor
+                elevatorState.callButtonsDown -= currentFloor
+                elevatorState.queuedFloors -= currentFloor
+                elevatorState.doorState = DoorState.OPENING
+                return@LaunchedEffect
+            }
+
             // Determine next floor using elevator algorithm
             val nextFloor = getNextFloor(elevatorState)
-            if (nextFloor != null && nextFloor !=
-                elevatorState.currentFloor) {
+            if (nextFloor != null && nextFloor != currentFloor) {
                 elevatorState.targetFloor = nextFloor
                 elevatorState.direction =
-                    if (nextFloor > elevatorState.currentFloor) Direction.UP
+                    if (nextFloor > currentFloor) Direction.UP
                     else Direction.DOWN
                 elevatorState.isMoving = true
             } else if (!hasRequests) {
@@ -263,20 +277,10 @@ fun App() {
             elevatorState.queuedFloors -= arrivedFloor
         }
 
-        // Clear call buttons
-        if (isTargetArrival) {
-            // At target floor: clear BOTH directions (we came here to service a call)
-            elevatorState.callButtonsUp -= arrivedFloor
-            elevatorState.callButtonsDown -= arrivedFloor
-        } else {
-            // Intermediate stop: only clear matching direction
-            if (movingUp && arrivedFloor in elevatorState.callButtonsUp) {
-                elevatorState.callButtonsUp -= arrivedFloor
-            }
-            if (!movingUp && arrivedFloor in elevatorState.callButtonsDown) {
-                elevatorState.callButtonsDown -= arrivedFloor
-            }
-        }
+        // Clear call buttons - always clear BOTH directions at arrived floor
+        // This handles the case where both up and down were pressed at the same floor
+        elevatorState.callButtonsUp -= arrivedFloor
+        elevatorState.callButtonsDown -= arrivedFloor
 
         // Clear direction if no more destinations queued
         if (elevatorState.queuedFloors.isEmpty()) {
@@ -308,9 +312,10 @@ fun App() {
             ElevatorButtonPanel(
                 litButtons = elevatorState.queuedFloors,
                 onButtonPress = { floor ->
-                    // Don't light button if elevator is at that floor
+                    // Don't light button if elevator is at that floor with doors open
                     if (elevatorState.currentFloor == floor &&
-                        !elevatorState.isMoving) {
+                        !elevatorState.isMoving &&
+                        elevatorState.doorState == DoorState.OPEN) {
                         return@ElevatorButtonPanel
                     }
                     elevatorState.queuedFloors =
