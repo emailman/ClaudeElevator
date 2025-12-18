@@ -1,6 +1,6 @@
 {
   "outputDirectory": "build/dist/wasmJs/productionExecutable",
-  "buildCommand": null,
-  "installCommand": null,
+  "buildCommand": "",
+  "installCommand": "",
   "framework": null
 }
