@@ -294,13 +294,33 @@ fun App() {
     MaterialTheme(
         colorScheme = darkColorScheme()
     ) {
-        Row(
+       Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.background),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Left side: Elevator shaft with call buttons
-            ElevatorShaftWithCallButtons(
+            // Header
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Elevator Simulator",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "by Claude and Eric-Version 1",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                // Left side: Elevator shaft with call buttons
+                ElevatorShaftWithCallButtons(
                 elevatorState = elevatorState,
                 modifier = Modifier
                     .weight(2.5f)
@@ -330,6 +350,7 @@ fun App() {
                     .weight(1f)
                     .fillMaxHeight()
             )
+            }
         }
     }
 }

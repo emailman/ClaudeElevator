@@ -1,4 +1,9 @@
+<div style="text-align: center;">
+
 # Elevator Simulator
+### by Claude and Eric-Version 1
+
+</div>
 
 A visual elevator simulation built with Kotlin/WASM and Compose Multiplatform. The application renders an interactive elevator shaft with animated car movement, doors, and a button panel.
 
