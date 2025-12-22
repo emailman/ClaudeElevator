@@ -22,6 +22,7 @@ import androidx.compose.ui.window.ComposeViewport
 import kotlinx.browser.document
 import kotlinx.coroutines.delay
 
+
 // Elevator direction
 enum class Direction { UP, DOWN, NONE }
 
@@ -40,8 +41,8 @@ class ElevatorState {
     // 0 = closed, 1 = open
     var doorProgress by mutableStateOf(1f)
 
-    // 0-1 progress between floors
-    var positionProgress by mutableStateOf(0f)
+    // Absolute position (1.0 = floor 1, 2.5 = halfway between floor 2 and 3)
+    var absolutePosition by mutableStateOf(1f)
     var isMoving by mutableStateOf(false)
     var queuedFloors by mutableStateOf(setOf<Int>())
 
@@ -207,88 +208,146 @@ fun App() {
         }
     }
 
-    // Movement animation - smooth continuous motion,
-    // stops at queued floors and directional call buttons
+    // Movement animation - continuous motion using absolute position
     LaunchedEffect(
         elevatorState.isMoving,
         elevatorState.targetFloor) {
         if (!elevatorState.isMoving) return@LaunchedEffect
 
-        val startFloor = elevatorState.currentFloor
-        val direction =
-            if (elevatorState.targetFloor > startFloor) 1 else -1
-        val movingUp = direction == 1
-        val totalFloors =
-            kotlin.math.abs(elevatorState.targetFloor - startFloor)
-        val msPerFloor = 2000
-        val totalDuration = msPerFloor * totalFloors
-        val frames = totalDuration / 16
+        var goingUp = elevatorState.direction == Direction.UP
+        val frameTime = 16L  // ~60fps
+        val movementPerFrame = 0.5f / (1000f / frameTime)  // 0.5 floors per second
 
-        var lastPassedFloor = startFloor
-        var stopFloor: Int? = null
-
-        for (i in 1..frames) {
-            val linearProgress = i.toFloat() / frames
-
-            // Ease in-out for smooth acceleration/deceleration
-            val eased = if (linearProgress < 0.5f) {
-                2f * linearProgress * linearProgress
+        // Helper to check if we should stop at a floor
+        fun shouldStopAt(floor: Int, direction: Boolean): Boolean {
+            val internalStop = floor in elevatorState.queuedFloors
+            val matchingCallStop = if (direction) {
+                floor in elevatorState.callButtonsUp
             } else {
-                1f - (-2f * linearProgress + 2f).let { it * it } / 2f
+                floor in elevatorState.callButtonsDown
+            }
+            return internalStop || matchingCallStop
+        }
+
+        // Helper to check for more requests in the direction elevator is moving
+        // Must check ALL request types - we continue until no requests remain in travel direction
+        fun hasRequestsInDirection(floor: Int, direction: Boolean): Boolean {
+            val allRequests = elevatorState.queuedFloors +
+                    elevatorState.callButtonsUp +
+                    elevatorState.callButtonsDown
+            return if (direction) {
+                allRequests.any { it > floor }
+            } else {
+                allRequests.any { it < floor }
+            }
+        }
+
+        // Keep moving until we find a valid stop
+        while (true) {
+            // Move position using fixed time step
+            val movement = movementPerFrame * (if (goingUp) 1f else -1f)
+            val newPosition = (elevatorState.absolutePosition + movement).coerceIn(1f, 6f)
+            elevatorState.absolutePosition = newPosition
+
+            // Check if we've reached a floor
+            val currentFloor = if (goingUp) {
+                newPosition.toInt().let { if (newPosition == it.toFloat()) it else it + 1 }
+            } else {
+                newPosition.toInt().let { if (newPosition == it.toFloat()) it else it }
             }
 
-            val totalFloorProgress = eased * totalFloors
-            val currentFloorFromStart = totalFloorProgress.toInt()
-            val floorProgress = totalFloorProgress - currentFloorFromStart
+            // Check if we've arrived at a floor (position is very close to an integer)
+            val nearestFloor = newPosition.let { kotlin.math.round(it).toInt() }
+            val atFloor = kotlin.math.abs(newPosition - nearestFloor) < 0.01f
 
-            val newFloor = startFloor + (currentFloorFromStart * direction)
-            elevatorState.currentFloor = newFloor.coerceIn(1, 6)
-            elevatorState.positionProgress = floorProgress
+            if (atFloor) {
+                elevatorState.currentFloor = nearestFloor
 
-            // Check if we just arrived at a new floor that needs service
-            if (newFloor != lastPassedFloor && newFloor != startFloor) {
-                // Stop for internal buttons always
-                val internalStop = newFloor in elevatorState.queuedFloors
-                // Stop for call buttons only if traveling in the matching direction
-                val callStop = if (movingUp) {
-                    newFloor in elevatorState.callButtonsUp
+                // Boundary check
+                if (nearestFloor <= 1 && !goingUp) {
+                    elevatorState.absolutePosition = 1f
+                    goingUp = true
+                    elevatorState.direction = Direction.UP
+                } else if (nearestFloor >= 6 && goingUp) {
+                    elevatorState.absolutePosition = 6f
+                    goingUp = false
+                    elevatorState.direction = Direction.DOWN
+                }
+
+                // Check if we should stop here
+                if (shouldStopAt(nearestFloor, goingUp)) {
+                    // Snap to exact floor and stop
+                    elevatorState.absolutePosition = nearestFloor.toFloat()
+                    elevatorState.queuedFloors -= nearestFloor
+                    if (goingUp) {
+                        elevatorState.callButtonsUp -= nearestFloor
+                    } else {
+                        elevatorState.callButtonsDown -= nearestFloor
+                    }
+
+                    if (elevatorState.queuedFloors.isEmpty() &&
+                        elevatorState.callButtonsUp.isEmpty() &&
+                        elevatorState.callButtonsDown.isEmpty()) {
+                        elevatorState.direction = Direction.NONE
+                    }
+                    elevatorState.doorState = DoorState.OPENING
+                    elevatorState.isMoving = false
+                    return@LaunchedEffect
+                }
+
+                // Check if there are more requests in our current direction
+                if (hasRequestsInDirection(nearestFloor, goingUp)) {
+                    // Keep going - don't stop
                 } else {
-                    newFloor in elevatorState.callButtonsDown
-                }
+                    // No more requests in current direction - check for reverse call here
+                    val hasReverseCallHere = if (goingUp) {
+                        nearestFloor in elevatorState.callButtonsDown
+                    } else {
+                        nearestFloor in elevatorState.callButtonsUp
+                    }
 
-                if (internalStop || callStop) {
-                    stopFloor = newFloor
-                    break
+                    if (hasReverseCallHere) {
+                        // Snap to floor, reverse, and service
+                        elevatorState.absolutePosition = nearestFloor.toFloat()
+                        goingUp = !goingUp
+                        elevatorState.direction = if (goingUp) Direction.UP else Direction.DOWN
+                        elevatorState.callButtonsUp -= nearestFloor
+                        elevatorState.callButtonsDown -= nearestFloor
+                        elevatorState.queuedFloors -= nearestFloor
+
+                        if (elevatorState.queuedFloors.isEmpty() &&
+                            elevatorState.callButtonsUp.isEmpty() &&
+                            elevatorState.callButtonsDown.isEmpty()) {
+                            elevatorState.direction = Direction.NONE
+                        }
+                        elevatorState.doorState = DoorState.OPENING
+                        elevatorState.isMoving = false
+                        return@LaunchedEffect
+                    }
+
+                    // Check for requests in reverse direction
+                    val requestsInReverse = if (goingUp) {
+                        (elevatorState.queuedFloors + elevatorState.callButtonsDown).any { it < nearestFloor }
+                    } else {
+                        (elevatorState.queuedFloors + elevatorState.callButtonsUp).any { it > nearestFloor }
+                    }
+
+                    if (requestsInReverse) {
+                        // Reverse direction and keep moving
+                        goingUp = !goingUp
+                        elevatorState.direction = if (goingUp) Direction.UP else Direction.DOWN
+                    } else {
+                        // No requests anywhere - stop
+                        elevatorState.absolutePosition = nearestFloor.toFloat()
+                        elevatorState.direction = Direction.NONE
+                        elevatorState.isMoving = false
+                        return@LaunchedEffect
+                    }
                 }
-                lastPassedFloor = newFloor
             }
 
             delay(16)
         }
-
-        // Finalize position at stop floor or target
-        val arrivedFloor = stopFloor ?: elevatorState.targetFloor
-        // val isTargetArrival = stopFloor == null
-        elevatorState.currentFloor = arrivedFloor
-        elevatorState.positionProgress = 0f
-
-        // Clear internal queue
-        if (arrivedFloor in elevatorState.queuedFloors) {
-            elevatorState.queuedFloors -= arrivedFloor
-        }
-
-        // Clear call buttons - always clear BOTH directions at arrived floor
-        // This handles the case where both up and down were pressed at the same floor
-        elevatorState.callButtonsUp -= arrivedFloor
-        elevatorState.callButtonsDown -= arrivedFloor
-
-        // Clear direction if no more destinations queued
-        if (elevatorState.queuedFloors.isEmpty()) {
-            elevatorState.direction = Direction.NONE
-        }
-
-        elevatorState.doorState = DoorState.OPENING
-        elevatorState.isMoving = false
     }
 
     MaterialTheme(
@@ -309,7 +368,7 @@ fun App() {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "by Claude and Eric-Version 1",
+                text = "by Claude and Eric - Version 1.7",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
@@ -397,9 +456,38 @@ fun getNextFloor(state: ElevatorState): Int? {
             ?: downFloors.filter { it > current }.minOrNull()
         }
         Direction.NONE -> {
-            // Pick the nearest floor from any queue
-            val allFloors = state.queuedFloors + state.callButtonsUp + state.callButtonsDown
-            allFloors.minByOrNull { kotlin.math.abs(it - current) }
+            // When idle, pick a floor we can service correctly based on travel direction:
+            // - Going UP: can service internal requests + UP calls
+            // - Going DOWN: can service internal requests + DOWN calls
+
+            // Floors serviceable if we go UP (above current floor)
+            val serviceableGoingUp = (state.queuedFloors + state.callButtonsUp).filter { it > current }
+
+            // Floors serviceable if we go DOWN (below current floor)
+            val serviceableGoingDown = (state.queuedFloors + state.callButtonsDown).filter { it < current }
+
+            // Check for requests at current floor
+            val atCurrent = current in state.queuedFloors ||
+                    current in state.callButtonsUp ||
+                    current in state.callButtonsDown
+
+            when {
+                atCurrent -> current
+                serviceableGoingUp.isNotEmpty() && serviceableGoingDown.isNotEmpty() -> {
+                    // Can go either way - pick nearest serviceable floor
+                    val nearestUp = serviceableGoingUp.minOrNull()!!
+                    val nearestDown = serviceableGoingDown.maxOrNull()!!
+                    if (nearestUp - current <= current - nearestDown) nearestUp else nearestDown
+                }
+                serviceableGoingUp.isNotEmpty() -> serviceableGoingUp.minOrNull()
+                serviceableGoingDown.isNotEmpty() -> serviceableGoingDown.maxOrNull()
+                else -> {
+                    // Only "wrong direction" calls exist (e.g., DOWN call above us)
+                    // We must go there anyway - pick nearest
+                    val allCalls = state.callButtonsUp + state.callButtonsDown
+                    allCalls.minByOrNull { kotlin.math.abs(it - current) }
+                }
+            }
         }
     }
 }
@@ -465,17 +553,12 @@ fun ElevatorShaft(
                 )
             }
 
-            // Calculate elevator position
-            val elevatorFloor = elevatorState.currentFloor
-            val progress = elevatorState.positionProgress
-            val directionMultiplier =
-                if (elevatorState.direction == Direction.UP) 1f else -1f
+            // Calculate elevator position using absolute position
             val carClearance = floorHeight * 0.15f
             val carHeight = floorHeight - carClearance
 
-            val baseY = size.height - (elevatorFloor * floorHeight)
-            val carY = baseY + carClearance -
-                    (progress * floorHeight * directionMultiplier)
+            // absolutePosition is 1.0 to 6.0, directly maps to Y position
+            val carY = size.height - (elevatorState.absolutePosition * floorHeight) + carClearance
 
             // Draw elevator car body
             drawRect(
