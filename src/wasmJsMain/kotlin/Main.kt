@@ -121,34 +121,37 @@ fun App() {
     }
 
     // Idle homing logic - return to floor 1 after 5 seconds of no requests
-    LaunchedEffect(
-        elevatorState.queuedFloors,
-        elevatorState.callButtonsUp,
-        elevatorState.callButtonsDown,
-        elevatorState.isMoving,
-        elevatorState.currentFloor
-    ) {
-        val hasRequests = elevatorState.queuedFloors.isNotEmpty() ||
-                elevatorState.callButtonsUp.isNotEmpty() ||
-                elevatorState.callButtonsDown.isNotEmpty()
+    // Use a polling approach for reliability
+    LaunchedEffect(Unit) {
+        var idleTime = 0L
+        val checkInterval = 100L // Check every 100ms
+        val homingDelay = 5000L  // 5 seconds before homing
 
-        // Only start homing timer if idle, not moving, and not at floor 1
-        if (!hasRequests && !elevatorState.isMoving &&
-            elevatorState.currentFloor != 1) {
-            // Wait 5 seconds
-            delay(5000)
+        while (true) {
+            delay(checkInterval)
 
-            // Re-check conditions after a delay
-            val stillNoRequests = elevatorState.queuedFloors.isEmpty() &&
-                    elevatorState.callButtonsUp.isEmpty() &&
-                    elevatorState.callButtonsDown.isEmpty()
+            val hasRequests = elevatorState.queuedFloors.isNotEmpty() ||
+                    elevatorState.callButtonsUp.isNotEmpty() ||
+                    elevatorState.callButtonsDown.isNotEmpty()
 
-            if (stillNoRequests && !elevatorState.isMoving &&
-                elevatorState.currentFloor != 1) {
-                // Home to floor 1 with doors open
-                elevatorState.targetFloor = 1
-                elevatorState.direction = Direction.DOWN
-                elevatorState.isMoving = true
+            val isIdle = !hasRequests &&
+                    !elevatorState.isMoving &&
+                    elevatorState.doorState == DoorState.CLOSED &&
+                    elevatorState.currentFloor != 1
+
+            if (isIdle) {
+                idleTime += checkInterval
+                if (idleTime >= homingDelay) {
+                    // Start homing to floor 1
+                    // Add floor 1 to queuedFloors so movement logic sees it as a destination
+                    elevatorState.queuedFloors += 1
+                    elevatorState.targetFloor = 1
+                    elevatorState.direction = Direction.DOWN
+                    elevatorState.isMoving = true
+                    idleTime = 0L
+                }
+            } else {
+                idleTime = 0L
             }
         }
     }
@@ -230,7 +233,8 @@ fun App() {
         }
 
         // Helper to check for more requests in the direction elevator is moving
-        // Must check ALL request types - we continue until no requests remain in travel direction
+        // Must check ALL request types
+        // We continue until no requests remain in the travel direction
         fun hasRequestsInDirection(floor: Int, direction: Boolean): Boolean {
             val allRequests = elevatorState.queuedFloors +
                     elevatorState.callButtonsUp +
@@ -244,13 +248,13 @@ fun App() {
 
         // Keep moving until we find a valid stop
         while (true) {
-            // Move position using fixed time step
+            // Move position using a fixed time step
             val movement = movementPerFrame * (if (goingUp) 1f else -1f)
             val newPosition = (elevatorState.absolutePosition + movement).coerceIn(1f, 6f)
             elevatorState.absolutePosition = newPosition
 
             // Check if we've reached a floor
-            val currentFloor = if (goingUp) {
+            if (goingUp) {
                 newPosition.toInt().let { if (newPosition == it.toFloat()) it else it + 1 }
             } else {
                 newPosition.toInt().let { if (newPosition == it.toFloat()) it else it }
@@ -276,7 +280,7 @@ fun App() {
 
                 // Check if we should stop here
                 if (shouldStopAt(nearestFloor, goingUp)) {
-                    // Snap to exact floor and stop
+                    // Snap to the exact floor and stop
                     elevatorState.absolutePosition = nearestFloor.toFloat()
                     elevatorState.queuedFloors -= nearestFloor
                     if (goingUp) {
@@ -299,7 +303,8 @@ fun App() {
                 if (hasRequestsInDirection(nearestFloor, goingUp)) {
                     // Keep going - don't stop
                 } else {
-                    // No more requests in current direction - check for reverse call here
+                    // No more requests in the current direction
+                    // Check for reverse call here
                     val hasReverseCallHere = if (goingUp) {
                         nearestFloor in elevatorState.callButtonsDown
                     } else {
@@ -325,7 +330,7 @@ fun App() {
                         return@LaunchedEffect
                     }
 
-                    // Check for requests in reverse direction
+                    // Check for requests in the reverse direction
                     val requestsInReverse = if (goingUp) {
                         (elevatorState.queuedFloors + elevatorState.callButtonsDown).any { it < nearestFloor }
                     } else {
@@ -341,6 +346,10 @@ fun App() {
                         elevatorState.absolutePosition = nearestFloor.toFloat()
                         elevatorState.direction = Direction.NONE
                         elevatorState.isMoving = false
+                        // If we arrived at floor 1 (homing), open the doors
+                        if (nearestFloor == 1) {
+                            elevatorState.doorState = DoorState.OPENING
+                        }
                         return@LaunchedEffect
                     }
                 }
@@ -368,7 +377,7 @@ fun App() {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "by Claude and Eric - Version 1.7",
+                text = "by Claude and Eric - Version 2",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
@@ -456,17 +465,18 @@ fun getNextFloor(state: ElevatorState): Int? {
             ?: downFloors.filter { it > current }.minOrNull()
         }
         Direction.NONE -> {
-            // When idle, pick a floor we can service correctly based on travel direction:
+            // When idle, pick a floor we can service correctly
+            // based on the travel direction:
             // - Going UP: can service internal requests + UP calls
             // - Going DOWN: can service internal requests + DOWN calls
 
-            // Floors serviceable if we go UP (above current floor)
+            // Floors serviceable if we go UP (above the current floor)
             val serviceableGoingUp = (state.queuedFloors + state.callButtonsUp).filter { it > current }
 
-            // Floors serviceable if we go DOWN (below current floor)
+            // Floors serviceable if we go DOWN (below the current floor)
             val serviceableGoingDown = (state.queuedFloors + state.callButtonsDown).filter { it < current }
 
-            // Check for requests at current floor
+            // Check for requests at the current floor
             val atCurrent = current in state.queuedFloors ||
                     current in state.callButtonsUp ||
                     current in state.callButtonsDown
@@ -474,7 +484,7 @@ fun getNextFloor(state: ElevatorState): Int? {
             when {
                 atCurrent -> current
                 serviceableGoingUp.isNotEmpty() && serviceableGoingDown.isNotEmpty() -> {
-                    // Can go either way - pick nearest serviceable floor
+                    // Can go either way - pick the nearest serviceable floor
                     val nearestUp = serviceableGoingUp.minOrNull()!!
                     val nearestDown = serviceableGoingDown.maxOrNull()!!
                     if (nearestUp - current <= current - nearestDown) nearestUp else nearestDown
@@ -483,7 +493,7 @@ fun getNextFloor(state: ElevatorState): Int? {
                 serviceableGoingDown.isNotEmpty() -> serviceableGoingDown.maxOrNull()
                 else -> {
                     // Only "wrong direction" calls exist (e.g., DOWN call above us)
-                    // We must go there anyway - pick nearest
+                    // We must go there anyway - pick the nearest
                     val allCalls = state.callButtonsUp + state.callButtonsDown
                     allCalls.minByOrNull { kotlin.math.abs(it - current) }
                 }
