@@ -471,10 +471,12 @@ fun getNextFloor(state: ElevatorState): Int? {
             // - Going DOWN: can service internal requests + DOWN calls
 
             // Floors serviceable if we go UP (above the current floor)
-            val serviceableGoingUp = (state.queuedFloors + state.callButtonsUp).filter { it > current }
+            val serviceableGoingUp =
+                (state.queuedFloors + state.callButtonsUp).filter { it > current }
 
             // Floors serviceable if we go DOWN (below the current floor)
-            val serviceableGoingDown = (state.queuedFloors + state.callButtonsDown).filter { it < current }
+            val serviceableGoingDown =
+                (state.queuedFloors + state.callButtonsDown).filter { it < current }
 
             // Check for requests at the current floor
             val atCurrent = current in state.queuedFloors ||
@@ -740,31 +742,32 @@ fun ElevatorButtonPanel(
         shape = MaterialTheme.shapes.large,
         tonalElevation = 4.dp
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceEvenly
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "SELECT FLOOR",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                letterSpacing = 2.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Floor buttons 6 down to 1 (top to bottom)
-            for (floor in 6 downTo 1) {
-                FloorButton(
-                    floor = floor,
-                    isLit = floor in litButtons,
-                    onClick = { onButtonPress(floor) }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "SELECT FLOOR",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 2.sp
                 )
-                if (floor > 1) {
-                    Spacer(modifier = Modifier.height(12.dp))
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Floor buttons 6 down to 1 (top to bottom)
+                for (floor in 6 downTo 1) {
+                    FloorButton(
+                        floor = floor,
+                        isLit = floor in litButtons,
+                        onClick = { onButtonPress(floor) }
+                    )
                 }
             }
         }
