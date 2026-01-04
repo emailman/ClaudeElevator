@@ -381,47 +381,45 @@ fun App() {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "by Claude and Eric - Version 3.1",
+                text = "by Claude and Eric - Version 3.2",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left side: Elevator shaft with call buttons
                 ElevatorShaftWithCallButtons(
-                elevatorState = elevatorState,
-                modifier = Modifier
-                    .weight(2.5f)
-                    .fillMaxHeight()
-                    .padding(16.dp)
-            )
+                    elevatorState = elevatorState,
+                    modifier = Modifier
+                        .weight(2.5f)
+                        .fillMaxHeight()
+                        .padding(16.dp)
+                )
 
-            // Right side: Internal elevator button panel
-            ElevatorButtonPanel(
-                litButtons = elevatorState.queuedFloors,
-                onButtonPress = { floor ->
-                    // Don't light button if elevator is
-                    // at that floor with doors open
-                    if (elevatorState.currentFloor == floor &&
-                        !elevatorState.isMoving &&
-                        elevatorState.doorState == DoorState.OPEN) {
-                        return@ElevatorButtonPanel
-                    }
-                    elevatorState.queuedFloors =
-                        if (floor in elevatorState.queuedFloors) {
-                        elevatorState.queuedFloors - floor
-                    } else {
-                        elevatorState.queuedFloors + floor
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            )
+                // Right side: Internal elevator button panel
+                ElevatorButtonPanel(
+                    litButtons = elevatorState.queuedFloors,
+                    onButtonPress = { floor ->
+                        // Don't light button if elevator is
+                        // at that floor with doors open
+                        if (elevatorState.currentFloor == floor &&
+                            !elevatorState.isMoving &&
+                            elevatorState.doorState == DoorState.OPEN) {
+                            return@ElevatorButtonPanel
+                        }
+                        elevatorState.queuedFloors =
+                            if (floor in elevatorState.queuedFloors) {
+                                elevatorState.queuedFloors - floor
+                            } else {
+                                elevatorState.queuedFloors + floor
+                            }
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -742,31 +740,37 @@ fun ElevatorButtonPanel(
     onButtonPress: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    Column(
         modifier = modifier.padding(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 4.dp
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
+        // Title above the panel
+        Text(
+            text = "SELECT",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            letterSpacing = 2.sp
+        )
+        Text(
+            text = "FLOOR",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            letterSpacing = 2.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Button panel surface
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = 4.dp
         ) {
             Column(
+                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = "SELECT FLOOR",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 2.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
                 // Floor buttons 6 down to 1 (top to bottom)
                 for (floor in 6 downTo 1) {
                     FloorButton(
