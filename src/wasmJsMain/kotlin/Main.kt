@@ -381,7 +381,7 @@ fun App() {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "by Claude and Eric - Version 3",
+                text = "by Claude and Eric - Version 3.1",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
@@ -801,8 +801,7 @@ fun FloorButton(
     Button(
         onClick = onClick,
         modifier = Modifier
-            .size(64.dp)
-            .clip(CircleShape),
+            .requiredSize(64.dp),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = buttonColor
