@@ -1,7 +1,7 @@
 <div style="text-align: center;">
 
 # Elevator Simulator
-### by Claude and Eric-Version 1
+### by Claude and Eric-Version 3.2
 
 </div>
 
