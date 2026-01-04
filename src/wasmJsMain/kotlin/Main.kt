@@ -120,12 +120,12 @@ fun App() {
         }
     }
 
-    // Idle homing logic - return to floor 1 after 5 seconds of no requests
+    // Idle homing logic - return to floor 1 after 4 seconds of no requests
     // Use a polling approach for reliability
     LaunchedEffect(Unit) {
         var idleTime = 0L
         val checkInterval = 100L // Check every 100ms
-        val homingDelay = 5000L  // 5 seconds before homing
+        val homingDelay = 4000L  // 4 seconds before homing
 
         while (true) {
             delay(checkInterval)
@@ -143,7 +143,8 @@ fun App() {
                 idleTime += checkInterval
                 if (idleTime >= homingDelay) {
                     // Start homing to floor 1
-                    // Add floor 1 to queuedFloors so movement logic sees it as a destination
+                    // Add floor 1 to queuedFloors so movement logic
+                    // sees it as a destination
                     elevatorState.queuedFloors += 1
                     elevatorState.targetFloor = 1
                     elevatorState.direction = Direction.DOWN
@@ -332,15 +333,18 @@ fun App() {
 
                     // Check for requests in the reverse direction
                     val requestsInReverse = if (goingUp) {
-                        (elevatorState.queuedFloors + elevatorState.callButtonsDown).any { it < nearestFloor }
+                        (elevatorState.queuedFloors + elevatorState.callButtonsDown)
+                            .any { it < nearestFloor }
                     } else {
-                        (elevatorState.queuedFloors + elevatorState.callButtonsUp).any { it > nearestFloor }
+                        (elevatorState.queuedFloors + elevatorState.callButtonsUp)
+                            .any { it > nearestFloor }
                     }
 
                     if (requestsInReverse) {
                         // Reverse direction and keep moving
                         goingUp = !goingUp
-                        elevatorState.direction = if (goingUp) Direction.UP else Direction.DOWN
+                        elevatorState.direction =
+                            if (goingUp) Direction.UP else Direction.DOWN
                     } else {
                         // No requests anywhere - stop
                         elevatorState.absolutePosition = nearestFloor.toFloat()
@@ -377,7 +381,7 @@ fun App() {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "by Claude and Eric - Version 2",
+                text = "by Claude and Eric - Version 3",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
@@ -489,7 +493,8 @@ fun getNextFloor(state: ElevatorState): Int? {
                     // Can go either way - pick the nearest serviceable floor
                     val nearestUp = serviceableGoingUp.minOrNull()!!
                     val nearestDown = serviceableGoingDown.maxOrNull()!!
-                    if (nearestUp - current <= current - nearestDown) nearestUp else nearestDown
+                    if (nearestUp - current <= current - nearestDown) nearestUp else
+                        nearestDown
                 }
                 serviceableGoingUp.isNotEmpty() -> serviceableGoingUp.minOrNull()
                 serviceableGoingDown.isNotEmpty() -> serviceableGoingDown.maxOrNull()
@@ -570,7 +575,8 @@ fun ElevatorShaft(
             val carHeight = floorHeight - carClearance
 
             // absolutePosition is 1.0 to 6.0, directly maps to Y position
-            val carY = size.height - (elevatorState.absolutePosition * floorHeight) + carClearance
+            val carY = size.height - (elevatorState.absolutePosition * floorHeight) +
+                    carClearance
 
             // Draw elevator car body
             drawRect(
